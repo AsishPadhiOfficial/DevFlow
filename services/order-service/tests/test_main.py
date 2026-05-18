@@ -15,16 +15,14 @@ async def override_get_db():
 app.dependency_overrides[get_db] = override_get_db
 
 
-@pytest.fixture(autouse=True)
-def mock_db_engine():
-    with patch('main.engine.begin', new_callable=AsyncMock):
-        yield
+@pytest.fixture
+def client():
+    with patch('database.engine.begin', new_callable=AsyncMock):
+        with TestClient(app) as c:
+            yield c
 
 
-client = TestClient(app)
-
-
-def test_health_check():
+def test_health_check(client):
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json()["status"] == "healthy"
@@ -32,13 +30,13 @@ def test_health_check():
 
 @patch('main.publish_event', new_callable=AsyncMock)
 @patch.object(user_service_cb, 'call', new_callable=AsyncMock)
-def test_create_order(mock_cb_call, mock_publish):
+def test_create_order(mock_cb_call, mock_publish, client):
     response = client.post(
         "/orders", json={"user_id": 1, "product": "Test", "amount": 9.99})
     assert response.status_code in [200, 201]
 
 
-def test_list_orders():
+def test_list_orders(client):
     response = client.get("/orders")
     assert response.status_code == 200
     assert isinstance(response.json(), list)

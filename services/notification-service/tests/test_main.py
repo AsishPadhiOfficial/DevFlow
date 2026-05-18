@@ -15,22 +15,20 @@ async def override_get_db():
 app.dependency_overrides[get_db] = override_get_db
 
 
-@pytest.fixture(autouse=True)
-def mock_db_engine():
-    with patch('main.engine.begin', new_callable=AsyncMock):
-        yield
+@pytest.fixture
+def client():
+    with patch('database.engine.begin', new_callable=AsyncMock):
+        with TestClient(app) as c:
+            yield c
 
 
-client = TestClient(app)
-
-
-def test_health_check():
+def test_health_check(client):
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json()["status"] == "healthy"
 
 
-def test_list_notifications():
+def test_list_notifications(client):
     response = client.get("/notifications")
     assert response.status_code == 200
     assert isinstance(response.json(), list)
