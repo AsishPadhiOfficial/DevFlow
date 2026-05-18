@@ -1,26 +1,52 @@
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import datetime
 
-from main import app, get_db
-
+# Overrides get_db before importing app so it is applied correctly
+from database import get_db
 
 async def override_get_db():
     mock_session = AsyncMock()
-    mock_result = AsyncMock()
-    mock_result.scalars().first.return_value = None
-    mock_result.scalars().all.return_value = []
+    mock_result = MagicMock()
+    
+    # Configure synchronous chain return values
+    mock_scalars = MagicMock()
+    mock_scalars.first.return_value = None
+    mock_scalars.all.return_value = []
+    
+    mock_result.scalars.return_value = mock_scalars
+    
+    # Configure execute to return the mock_result coroutine
     mock_session.execute.return_value = mock_result
+    
+    # Configure commit/refresh to populate required fields for Response validation
+    async def mock_refresh(instance):
+        instance.id = 1
+        instance.created_at = datetime.utcnow()
+        
+    mock_session.refresh = mock_refresh
     yield mock_session
 
-app.dependency_overrides[get_db] = override_get_db
+# Patch engine at module import time to prevent real DB connection in startup event
+mock_engine = MagicMock()
+mock_begin_context = MagicMock()
 
+# Setup mocks for 'async with engine.begin()'
+async_enter = AsyncMock()
+mock_begin_context.__aenter__ = async_enter
+mock_begin_context.__aexit__ = AsyncMock()
+
+mock_engine.begin.return_value = mock_begin_context
+
+with patch('database.engine', mock_engine):
+    from main import app
+    app.dependency_overrides[get_db] = override_get_db
 
 @pytest.fixture
 def client():
-    with patch('database.engine.begin', new_callable=AsyncMock):
-        with TestClient(app) as c:
-            yield c
+    with TestClient(app) as c:
+        yield c
 
 
 def test_health_check(client):
