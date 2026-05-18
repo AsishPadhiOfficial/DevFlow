@@ -58,12 +58,18 @@ jobs:
           pip install -r services/order-service/requirements.txt
           pip install -r services/notification-service/requirements.txt
           pip install -r services/analytics-service/requirements.txt
-      - name: Run tests with pytest
-        run: |
-          pytest services/user-service/tests/ -v --cov=services/user-service
-          pytest services/order-service/tests/ -v --cov=services/order-service
-          pytest services/notification-service/tests/ -v --cov=services/notification-service
-          pytest services/analytics-service/tests/ -v --cov=services/analytics-service
+      - name: Run User Service tests
+        working-directory: services/user-service
+        run: PYTHONPATH=. pytest tests/ -v --cov=.
+      - name: Run Order Service tests
+        working-directory: services/order-service
+        run: PYTHONPATH=. pytest tests/ -v --cov=.
+      - name: Run Notification Service tests
+        working-directory: services/notification-service
+        run: PYTHONPATH=. pytest tests/ -v --cov=.
+      - name: Run Analytics Service tests
+        working-directory: services/analytics-service
+        run: PYTHONPATH=. pytest tests/ -v --cov=.
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
         with:
