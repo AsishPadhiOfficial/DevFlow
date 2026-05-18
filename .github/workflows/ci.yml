@@ -82,9 +82,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set up Docker Buildx
+        # Note: Set up Buildx is used to enable docker compose build
         uses: docker/setup-buildx-action@v3
       - name: Build all service images
-        run: docker-compose build --parallel
+        run: docker compose build --parallel
       - name: Verify images
         run: docker images
 
@@ -94,7 +95,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Start services
-        run: docker-compose up -d
+        run: docker compose up -d
       - name: Wait for services to initialize
         run: sleep 30
       - name: Run health checks
@@ -120,4 +121,4 @@ jobs:
         run: |
           curl -f -X POST http://localhost:8080/api/orders -H "Content-Type: application/json" -d "{\"user_id\": $USER_ID, \"product\": \"Integration Product\", \"amount\": 19.99}"
       - name: Teardown
-        run: docker-compose down
+        run: docker compose down
