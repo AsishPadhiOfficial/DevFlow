@@ -1,3 +1,4 @@
+from prometheus_fastapi_instrumentator import Instrumentator
 import asyncio
 from fastapi import FastAPI, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,16 +11,17 @@ from models import EventLog
 from subscriber import start_subscriber
 
 app = FastAPI(title="Analytics Service")
-from prometheus_fastapi_instrumentator import Instrumentator
 Instrumentator().instrument(app).expose(app)
+
 
 @app.on_event("startup")
 async def startup():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    
+
     # Start the subscriber as a background task and keep a strong reference
     app.state.subscriber_task = asyncio.create_task(start_subscriber())
+
 
 @app.get("/analytics/summary")
 async def get_summary(db: AsyncSession = Depends(get_db)):
@@ -34,7 +36,7 @@ async def get_summary(db: AsyncSession = Depends(get_db)):
     # Events per minute (last 60 minutes)
     now = datetime.utcnow()
     one_hour_ago = now - timedelta(hours=1)
-    
+
     events_query = select(
         func.date_trunc('minute', EventLog.received_at).label('minute'),
         func.count(EventLog.id).label('count')
@@ -45,15 +47,17 @@ async def get_summary(db: AsyncSession = Depends(get_db)):
     ).order_by(
         'minute'
     )
-    
+
     events_result = await db.execute(events_query)
-    events_per_minute = [{"time": row.minute.isoformat(), "count": row.count} for row in events_result]
+    events_per_minute = [{"time": row.minute.isoformat(), "count": row.count}
+                         for row in events_result]
 
     return {
         "total_users": total_users,
         "total_orders": total_orders,
         "events_per_minute": events_per_minute
     }
+
 
 @app.get("/health")
 async def health_check():

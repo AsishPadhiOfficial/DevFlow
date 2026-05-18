@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 from main import app, get_db
 
+
 async def override_get_db():
     mock_session = AsyncMock()
     mock_result = AsyncMock()
@@ -14,17 +15,21 @@ async def override_get_db():
 
 app.dependency_overrides[get_db] = override_get_db
 
+
 @pytest.fixture(autouse=True)
 def mock_db_engine():
     with patch('main.engine.begin', new_callable=AsyncMock):
         yield
 
+
 client = TestClient(app)
+
 
 def test_health_check():
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json()["status"] == "healthy"
+
 
 def test_summary():
     response = client.get("/analytics/summary")

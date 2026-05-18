@@ -1,3 +1,4 @@
+from prometheus_fastapi_instrumentator import Instrumentator
 import asyncio
 import httpx
 from fastapi import FastAPI, Depends, HTTPException
@@ -13,18 +14,20 @@ from subscriber import start_subscriber
 from circuit_breaker import CircuitBreaker
 
 app = FastAPI(title="Order Service")
-from prometheus_fastapi_instrumentator import Instrumentator
 Instrumentator().instrument(app).expose(app)
 
-user_service_cb = CircuitBreaker("user-service", expected_exception=httpx.HTTPError)
+user_service_cb = CircuitBreaker(
+    "user-service", expected_exception=httpx.HTTPError)
+
 
 @app.on_event("startup")
 async def startup():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    
+
     # Start the subscriber as a background task
     app.state.subscriber_task = asyncio.create_task(start_subscriber())
+
 
 @app.get("/orders/circuit-breakers")
 async def get_circuit_breakers():
@@ -35,6 +38,7 @@ async def get_circuit_breakers():
         ]
     }
 
+
 @app.post("/orders")
 async def create_order(order: OrderCreate, db: AsyncSession = Depends(get_db)):
     # Validate user via user-service
@@ -43,7 +47,7 @@ async def create_order(order: OrderCreate, db: AsyncSession = Depends(get_db)):
             res = await client.get(f"http://user-service:8001/users/{order.user_id}", timeout=2.0)
             res.raise_for_status()
             return res.json()
-            
+
     user_validation_failed = False
     try:
         await user_service_cb.call(fetch_user)
@@ -77,11 +81,13 @@ async def create_order(order: OrderCreate, db: AsyncSession = Depends(get_db)):
 
     return new_order
 
+
 @app.get("/orders", response_model=List[OrderResponse])
 async def list_orders(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Order))
     orders = result.scalars().all()
     return orders
+
 
 @app.get("/health")
 async def health_check():

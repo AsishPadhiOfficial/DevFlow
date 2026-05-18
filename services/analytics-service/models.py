@@ -1,10 +1,10 @@
 from sqlalchemy import Column, Integer, String, DateTime, JSON, func
 from database import Base
-from datetime import datetime
+
 
 class EventLog(Base):
     __tablename__ = "events"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     event_type = Column(String, index=True)
     payload = Column(JSON)

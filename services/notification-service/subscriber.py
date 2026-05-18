@@ -6,15 +6,17 @@ from models import Notification
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost")
 
+
 async def process_event(channel: str, event_data: dict):
     payload = event_data.get("payload", {})
-    
+
     if channel == b"user.created":
         email = payload.get("email", "unknown")
         message = f"Welcome {payload.get('name', 'User')}! Your account has been created."
         notif_type = "WELCOME"
     elif channel == b"order.created":
-        email = f"user_{payload.get('user_id')}@example.com" # Mocking email retrieval
+        # Mocking email retrieval
+        email = f"user_{payload.get('user_id')}@example.com"
         message = f"Order confirmation for {payload.get('product')} (Amount: {payload.get('amount')})."
         notif_type = "ORDER_CONFIRMATION"
     else:
@@ -31,13 +33,14 @@ async def process_event(channel: str, event_data: dict):
         await db.commit()
         print(f"Sent notification: {message} to {email}")
 
+
 async def start_subscriber():
     redis_client = redis.from_url(REDIS_URL)
     pubsub = redis_client.pubsub()
     await pubsub.subscribe("user.created", "order.created")
-    
+
     print("Notification service subscribed to 'user.created' and 'order.created' events")
-    
+
     async for message in pubsub.listen():
         if message["type"] == "message":
             channel = message["channel"]
