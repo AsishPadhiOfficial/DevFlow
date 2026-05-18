@@ -1,0 +1,18 @@
+global:
+  scrape_interval: 5s
+scrape_configs:
+  - job_name: user-service
+    static_configs:
+      - targets: ['user-service:8001']
+  - job_name: order-service
+    static_configs:
+      - targets: ['order-service:8002']
+  - job_name: notification-service
+    static_configs:
+      - targets: ['notification-service:8003']
+  - job_name: analytics-service
+    static_configs:
+      - targets: ['analytics-service:8004']
+  - job_name: eventbus
+    static_configs:
+      - targets: ['eventbus:8005']

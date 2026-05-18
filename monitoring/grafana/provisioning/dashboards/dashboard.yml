@@ -1,0 +1,7 @@
+apiVersion: 1
+providers:
+  - name: DevFlow
+    folder: DevFlow
+    type: file
+    options:
+      path: /etc/grafana/provisioning/dashboards

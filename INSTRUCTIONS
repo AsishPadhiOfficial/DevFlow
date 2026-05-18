@@ -1,0 +1,603 @@
+Build a complete Event-Driven Microservices platform called "DevFlow"
+with the following exact specifications:
+
+TECH STACK:
+- 4 FastAPI microservices (User, Order, Notification, Analytics)
+- Redis Pub/Sub as message broker
+- PostgreSQL (one database per service, separate containers)
+- Nginx as API Gateway / reverse proxy
+- React + Vite frontend with Tailwind CSS
+- WebSocket for real-time event streaming to dashboard
+- Docker Compose orchestrating everything
+
+MICROSERVICES:
+
+1. User Service (port 8001)
+   - POST /users → create user → publish "user.created" event
+   - GET /users → list users
+   - GET /users/{id} → get user
+   - Own PostgreSQL database: users_db
+
+2. Order Service (port 8002)
+   - POST /orders → create order → publish "order.created" event
+   - GET /orders → list orders
+   - Subscribes to "user.created" (logs when new user can place orders)
+   - Own PostgreSQL database: orders_db
+
+3. Notification Service (port 8003)
+   - Subscribes to "user.created" → sends welcome notification
+   - Subscribes to "order.created" → sends order confirmation
+   - GET /notifications → list all notifications sent
+   - Stores notifications in its own PostgreSQL database: notifications_db
+
+4. Analytics Service (port 8004)
+   - Subscribes to ALL events
+   - Tracks: total users, total orders, events per minute
+   - GET /analytics/summary → returns aggregated stats
+   - Own PostgreSQL database: analytics_db
+
+NGINX (port 80):
+  /api/users → User Service
+  /api/orders → Order Service
+  /api/notifications → Notification Service
+  /api/analytics → Analytics Service
+  / → React Frontend
+
+REACT DASHBOARD (port 3000):
+Pages:
+1. Live Event Stream page
+   - Shows a real-time feed of all events flowing through the system
+   - Each event card shows: event type, timestamp, payload, which services received it
+   - Events animate in from top using CSS transitions
+   - Color coded: user.created=blue, order.created=green
+
+2. Services Overview page
+   - Grid of 4 service cards
+   - Each shows: service name, status (UP/DOWN), request count, last event time
+   - Health check every 5 seconds via polling
+
+3. Analytics Dashboard page
+   - Total users registered (number)
+   - Total orders placed (number)
+   - Events per minute line chart (Recharts)
+   - Notification success rate
+
+4. API Playground page
+   - Form to create a user (name, email)
+   - Form to create an order (user_id, product, amount)
+   - Response shown inline
+   - Triggers real events visible on Live Event Stream
+
+WEBSOCKET:
+- Each service publishes events to Redis
+- A central EventBus service (FastAPI + WebSocket, port 8005)
+  subscribes to all Redis channels and broadcasts to connected
+  React clients via WebSocket
+
+DOCKER COMPOSE:
+Services: nginx, user-service, order-service, 
+          notification-service, analytics-service,
+          eventbus, redis, postgres-users, 
+          postgres-orders, postgres-notifications,
+          postgres-analytics, frontend
+
+DESIGN:
+- Dark theme dashboard (#0A0A0F background)
+- Indigo accent color (#6366F1)
+- JetBrains Mono font for event payloads
+- Inter font for UI
+- Professional, clean, minimal
+
+DATABASE SCHEMA:
+
+users table (users_db):
+  id, name, email, created_at
+
+orders table (orders_db):
+  id, user_id, product, amount, status, created_at
+
+notifications table (notifications_db):
+  id, type, recipient_email, message, sent_at, event_source
+
+events table (analytics_db):
+  id, event_type, payload (JSON), received_at
+
+FOLDER STRUCTURE:
+devflow/
+├── services/
+│   ├── user-service/
+│   │   ├── main.py
+│   │   ├── models.py
+│   │   ├── database.py
+│   │   ├── publisher.py
+│   │   └── Dockerfile
+│   ├── order-service/  (same structure)
+│   ├── notification-service/ (same + subscriber.py)
+│   ├── analytics-service/ (same + subscriber.py)
+│   └── eventbus/ (main.py + Dockerfile)
+├── frontend/
+│   ├── src/
+│   │   ├── pages/
+│   │   │   ├── LiveEvents.tsx
+│   │   │   ├── Services.tsx
+│   │   │   ├── Analytics.tsx
+│   │   │   └── Playground.tsx
+│   │   ├── components/
+│   │   │   ├── EventCard.tsx
+│   │   │   ├── ServiceCard.tsx
+│   │   │   └── Layout.tsx
+│   │   ├── hooks/
+│   │   │   └── useWebSocket.ts
+│   │   └── App.tsx
+│   ├── package.json
+│   └── Dockerfile
+├── nginx/
+│   └── nginx.conf
+└── docker-compose.yml
+
+Generate ALL files completely. Do not skip any file.
+Start with docker-compose.yml, then nginx.conf,
+then each service, then the frontend.
+
+
+I have an existing DevFlow event-driven microservices platform 
+already built and working. It has:
+- 4 FastAPI services (user, order, notification, analytics)
+- EventBus FastAPI WebSocket service
+- Redis pub/sub
+- 4 PostgreSQL databases
+- Nginx gateway on port 8080
+- React + Vite frontend
+- Docker Compose orchestrating all 12 containers
+
+I need you to ADD the following 5 enhancements to the 
+existing project WITHOUT breaking anything that already works.
+Modify existing files where needed. Add new files where needed.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ENHANCEMENT 1 — PROMETHEUS + GRAFANA MONITORING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Add prometheus-fastapi-instrumentator to all 4 FastAPI 
+services AND the eventbus service.
+
+In each service's main.py, add:
+  from prometheus_fastapi_instrumentator import Instrumentator
+  Instrumentator().instrument(app).expose(app)
+
+This exposes a /metrics endpoint on each service.
+
+Add 2 new containers to docker-compose.yml:
+
+1. Prometheus container:
+   image: prom/prometheus:latest
+   port: 9090
+   mounts: ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+   depends_on: all 5 fastapi services
+
+2. Grafana container:
+   image: grafana/grafana:latest
+   port: 3001
+   environment:
+     GF_SECURITY_ADMIN_PASSWORD: devflow123
+     GF_USERS_ALLOW_SIGN_UP: "false"
+   mounts:
+     ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+   depends_on: prometheus
+
+Create these new files:
+
+FILE: monitoring/prometheus.yml
+Content — scrape all 5 services:
+global:
+  scrape_interval: 5s
+scrape_configs:
+  - job_name: user-service
+    static_configs:
+      - targets: ['user-service:8001']
+  - job_name: order-service
+    static_configs:
+      - targets: ['order-service:8002']
+  - job_name: notification-service
+    static_configs:
+      - targets: ['notification-service:8003']
+  - job_name: analytics-service
+    static_configs:
+      - targets: ['analytics-service:8004']
+  - job_name: eventbus
+    static_configs:
+      - targets: ['eventbus:8005']
+
+FILE: monitoring/grafana/provisioning/datasources/prometheus.yml
+Automatically connect Grafana to Prometheus:
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    type: prometheus
+    url: http://prometheus:9090
+    isDefault: true
+    access: proxy
+
+FILE: monitoring/grafana/provisioning/dashboards/dashboard.yml
+apiVersion: 1
+providers:
+  - name: DevFlow
+    folder: DevFlow
+    type: file
+    options:
+      path: /etc/grafana/provisioning/dashboards
+
+FILE: monitoring/grafana/provisioning/dashboards/devflow.json
+A complete Grafana dashboard JSON with these panels:
+  Panel 1: HTTP Requests per Second (all services, line chart)
+  Panel 2: HTTP Request Duration p99 (all services, line chart)
+  Panel 3: Total Requests Count (stat panel per service)
+  Panel 4: Active WebSocket Connections (eventbus)
+  Panel 5: HTTP Error Rate 4xx+5xx (all services)
+Use prometheus metrics:
+  http_requests_total
+  http_request_duration_seconds
+  
+Add to requirements.txt of ALL 5 services:
+  prometheus-fastapi-instrumentator==6.1.0
+
+Access points after implementation:
+  Prometheus: http://localhost:9090
+  Grafana: http://localhost:3001 (admin / devflow123)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ENHANCEMENT 2 — GITHUB ACTIONS CI PIPELINE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Create this complete file:
+FILE: .github/workflows/ci.yml
+
+The CI pipeline must do ALL of the following on every 
+push to main and every pull request:
+
+Job 1 — lint:
+  runs-on: ubuntu-latest
+  steps:
+    - Checkout code
+    - Set up Python 3.11
+    - Install flake8
+    - Run flake8 on services/ directory
+      (ignore E501 line length, max complexity 10)
+
+Job 2 — test (depends on lint):
+  runs-on: ubuntu-latest
+  services:
+    postgres:
+      image: postgres:15
+      env: POSTGRES_PASSWORD=testpass, POSTGRES_DB=testdb
+      options: health check with pg_isready
+    redis:
+      image: redis:7-alpine
+      options: health check with redis-cli ping
+  steps:
+    - Checkout code
+    - Set up Python 3.11
+    - Install pytest, httpx, pytest-asyncio
+    - Install each service's requirements.txt
+    - Run pytest on each service's tests/ folder
+      with verbose output and coverage report
+    - Upload coverage report as artifact
+
+Job 3 — docker-build (depends on test):
+  runs-on: ubuntu-latest
+  steps:
+    - Checkout code
+    - Set up Docker Buildx
+    - Build all service images using docker-compose:
+        docker-compose build --parallel
+    - Verify images were created successfully
+
+Job 4 — integration-test (depends on docker-build):
+  runs-on: ubuntu-latest
+  steps:
+    - Checkout code
+    - Start all services: docker-compose up -d
+    - Wait 30 seconds for services to initialize
+    - Run health checks on all services:
+        curl -f http://localhost:8080/api/users/health
+        curl -f http://localhost:8080/api/orders/health
+        curl -f http://localhost:8080/api/notifications/health
+        curl -f http://localhost:8080/api/analytics/health
+    - Create a test user via API and verify 201 response
+    - Create a test order and verify event was published
+    - docker-compose down
+
+Also add a GET /health endpoint to each FastAPI service:
+  returns: {"status": "healthy", "service": "user-service"}
+  
+Also create basic pytest test files for each service:
+
+FILE: services/user-service/tests/test_main.py
+  - test_health_check(): GET /health → 200
+  - test_create_user(): POST /users with valid data → 201
+  - test_create_user_invalid(): POST /users missing email → 422
+  - test_list_users(): GET /users → 200, returns list
+
+FILE: services/order-service/tests/test_main.py
+  - test_health_check(): GET /health → 200
+  - test_create_order(): POST /orders valid data → 201
+  - test_list_orders(): GET /orders → 200
+
+FILE: services/notification-service/tests/test_main.py
+  - test_health_check(): GET /health → 200
+  - test_list_notifications(): GET /notifications → 200
+
+FILE: services/analytics-service/tests/test_main.py
+  - test_health_check(): GET /health → 200
+  - test_summary(): GET /analytics/summary → 200
+
+All tests must use TestClient from fastapi.testclient
+and mock the database and Redis connections.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ENHANCEMENT 3 — PROFESSIONAL README WITH ARCHITECTURE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Completely rewrite README.md with this exact structure:
+
+# DevFlow — Event-Driven Microservices Platform
+
+[badges row]:
+  - CI/CD: GitHub Actions badge
+  - Docker: passing badge  
+  - License: MIT badge
+  - Python: 3.11 badge
+
+## What Is DevFlow?
+2-3 paragraph explanation of what the platform does,
+the problem it solves, and what makes it interesting.
+
+## Architecture
+ASCII diagram showing all containers and connections:
+  React Dashboard
+       ↓
+  Nginx (API Gateway :8080)
+  ↙    ↓    ↘         ↘
+User  Order Notif  Analytics  EventBus
+ ↓      ↓     ↓        ↓          ↓
+PG1   PG2   PG3       PG4       Redis
+              ↑_________________________|
+              (all services pub/sub to Redis)
+
+## Event Flow
+Step by step: what happens when POST /api/users is called
+Walk through every service that reacts to it.
+
+## Services Reference
+Table with columns: Service | Port | Database | Publishes | Subscribes
+One row per service.
+
+## Tech Stack
+Table: Category | Technology | Purpose
+Cover: Frontend, Backend, Database, Messaging, Gateway,
+       Monitoring, DevOps
+
+## Quick Start
+Prerequisites, clone, docker-compose up --build, 
+access at http://localhost:8080
+
+## Monitoring
+How to access Prometheus at :9090 and Grafana at :3001
+Default Grafana credentials.
+What metrics are available.
+
+## API Reference
+Curl examples for every endpoint:
+  POST /api/users
+  GET /api/users
+  GET /api/users/{id}
+  POST /api/orders
+  GET /api/orders
+  GET /api/notifications
+  GET /api/analytics/summary
+  WS ws://localhost:8080/ws
+
+## Architecture Decisions
+Section explaining WHY each technology was chosen:
+  - Why separate PostgreSQL per service (not one shared DB)
+  - Why Redis pub/sub (not direct HTTP calls between services)
+  - Why Nginx gateway (not direct port exposure)
+  - Why FastAPI (not Flask or Django)
+  - Why Circuit Breaker pattern (resilience)
+
+## CI/CD Pipeline
+Explanation of the 4-job GitHub Actions pipeline with
+a flow diagram in ASCII.
+
+## What I Learned
+5-7 bullet points of genuine technical learnings
+from building this.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ENHANCEMENT 4 — CIRCUIT BREAKER PATTERN
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Create a reusable circuit breaker utility used by 
+services that call other services.
+
+FILE: services/shared/circuit_breaker.py
+
+Implement a CircuitBreaker class with these exact states:
+  CLOSED (normal — requests pass through)
+  OPEN (failing — requests blocked, return fallback)
+  HALF_OPEN (testing — one request allowed through)
+
+Class definition:
+class CircuitBreaker:
+    def __init__(
+        self,
+        name: str,
+        failure_threshold: int = 5,
+        recovery_timeout: int = 30,
+        expected_exception: type = Exception
+    )
+    
+    async def call(self, func, *args, **kwargs):
+        # If OPEN and timeout not passed: raise CircuitBreakerOpen
+        # If OPEN and timeout passed: switch to HALF_OPEN, try call
+        # If HALF_OPEN and call succeeds: switch to CLOSED
+        # If HALF_OPEN and call fails: switch back to OPEN
+        # If CLOSED and call fails: increment failure count
+        # If failure count >= threshold: switch to OPEN
+        # If CLOSED and call succeeds: reset failure count
+
+    def get_state(self) -> dict:
+        returns: name, state, failure_count, 
+                 last_failure_time, next_retry_time
+
+Add a GET /circuit-breakers endpoint to each service
+that returns the state of all its circuit breakers:
+{
+  "service": "order-service",
+  "circuit_breakers": [
+    {
+      "name": "user-service",
+      "state": "CLOSED",
+      "failure_count": 0,
+      "last_failure_time": null
+    }
+  ]
+}
+
+Apply circuit breaker in order-service:
+  When order-service needs to validate a user_id,
+  it calls user-service via HTTP.
+  Wrap this call in a CircuitBreaker instance.
+  If user-service is down, return a graceful fallback:
+  {"detail": "User validation unavailable, order queued"}
+  instead of crashing.
+
+Add the circuit breaker state to the React 
+Services Overview page:
+  Below each service card, show circuit breaker status
+  CLOSED = green pill "Circuit: Closed"
+  OPEN = red pill "Circuit: Open ⚠"
+  HALF_OPEN = yellow pill "Circuit: Testing..."
+
+Also add a new endpoint to user-service for testing:
+  POST /users/simulate-failure
+  Causes the next 5 requests to return 500
+  So you can demo the circuit breaker opening
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ENHANCEMENT 5 — RATE LIMITING ON NGINX
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Modify the existing nginx/nginx.conf to add 
+rate limiting with these exact rules:
+
+1. Define rate limit zones at the top of nginx.conf 
+   (inside http block):
+
+   # General API rate limit: 10 requests/sec per IP
+   limit_req_zone $binary_remote_addr 
+     zone=api_limit:10m rate=10r/s;
+
+   # Strict limit for user creation: 2 requests/sec per IP
+   limit_req_zone $binary_remote_addr 
+     zone=user_create_limit:10m rate=2r/s;
+
+   # Order creation: 5 requests/sec per IP  
+   limit_req_zone $binary_remote_addr 
+     zone=order_create_limit:10m rate=5r/s;
+
+2. Apply rate limits to location blocks:
+
+   location /api/ {
+     limit_req zone=api_limit burst=20 nodelay;
+     limit_req_status 429;
+     # existing proxy settings
+   }
+
+   location /api/users {
+     limit_req zone=api_limit burst=20 nodelay;
+     limit_req_status 429;
+     # existing proxy settings
+   }
+
+   For POST to /api/users specifically:
+   Use limit_except GET to apply stricter limit
+   on write operations only.
+
+3. Add custom error response for rate limiting:
+   When rate limit is hit, return JSON (not HTML):
+   {
+     "error": "Rate limit exceeded",
+     "message": "Too many requests. Please retry after 1 second.",
+     "status": 429
+   }
+   
+   Do this by creating a custom error page:
+   error_page 429 /rate_limit_error.json;
+   location = /rate_limit_error.json {
+     return 429 '{"error":"Rate limit exceeded",...}';
+     add_header Content-Type application/json;
+   }
+
+4. Add rate limit headers to responses so frontend 
+   can show them:
+   add_header X-RateLimit-Limit $limit_req_status;
+
+5. Update the React API Playground page to handle 429:
+   If response status is 429, show a red toast/alert:
+   "Rate limit hit! Nginx blocked this request.
+    This demonstrates production-grade rate limiting."
+   This makes the rate limiting visible and 
+   demonstrable in the dashboard.
+
+6. Add a "Test Rate Limit" button in the 
+   API Playground page:
+   When clicked, it fires 15 rapid POST /api/users 
+   requests simultaneously.
+   Shows which ones got 200 and which got 429.
+   Displays results in a table:
+     Request 1: ✅ 201 Created
+     Request 2: ✅ 201 Created  
+     ...
+     Request 11: ❌ 429 Rate Limited
+     ...
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FINAL INSTRUCTIONS FOR ANTIGRAVITY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Implementation order (do in this exact sequence):
+
+1. Enhancement 5 first (nginx.conf — lowest risk, 
+   no new dependencies)
+
+2. Enhancement 1 second (Prometheus + Grafana — 
+   add to requirements.txt and docker-compose.yml)
+
+3. Enhancement 4 third (circuit breaker — 
+   new Python file + modify order-service)
+
+4. Enhancement 2 fourth (GitHub Actions — 
+   new files only, doesn't affect runtime)
+
+5. Enhancement 3 last (README — documentation only)
+
+Rules:
+- Do NOT delete or rewrite any existing working code
+- Only ADD to existing files, or create new files
+- After each enhancement, confirm what files 
+  were modified or created
+- Generate ALL files completely, no placeholders
+- If a file already exists, show the complete 
+  modified version
+- Make sure docker-compose.yml remains valid YAML
+  after all additions
+
+After completing all 5 enhancements, provide:
+1. Complete list of all new files created
+2. Complete list of all modified files  
+3. Final docker-compose up --build command
+4. All access URLs:
+   - Dashboard: http://localhost:8080
+   - Prometheus: http://localhost:9090
+   - Grafana: http://localhost:3001

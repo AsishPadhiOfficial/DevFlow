@@ -1,0 +1,117 @@
+name: DevFlow CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+      - name: Install flake8
+        run: pip install flake8
+      - name: Run flake8
+        run: flake8 services/ --ignore=E501 --max-complexity=10
+
+  test:
+    needs: lint
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: testdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          pip install pytest httpx pytest-asyncio pytest-cov
+          pip install -r services/user-service/requirements.txt
+          pip install -r services/order-service/requirements.txt
+          pip install -r services/notification-service/requirements.txt
+          pip install -r services/analytics-service/requirements.txt
+      - name: Run tests with pytest
+        run: |
+          pytest services/user-service/tests/ -v --cov=services/user-service
+          pytest services/order-service/tests/ -v --cov=services/order-service
+          pytest services/notification-service/tests/ -v --cov=services/notification-service
+          pytest services/analytics-service/tests/ -v --cov=services/analytics-service
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage-report
+          path: .coverage
+
+  docker-build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      - name: Build all service images
+        run: docker-compose build --parallel
+      - name: Verify images
+        run: docker images
+
+  integration-test:
+    needs: docker-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Start services
+        run: docker-compose up -d
+      - name: Wait for services to initialize
+        run: sleep 30
+      - name: Run health checks
+        run: |
+          curl -f http://localhost:8080/api/users/health
+          curl -f http://localhost:8080/api/orders/health
+          curl -f http://localhost:8080/api/notifications/health
+          curl -f http://localhost:8080/api/analytics/health
+      - name: Create test user
+        run: |
+          response=$(curl -s -w "\n%{http_code}" -X POST http://localhost:8080/api/users -H "Content-Type: application/json" -d '{"name": "Integration User", "email": "int@example.com"}')
+          body=$(echo "$response" | head -n -1)
+          status_code=$(echo "$response" | tail -n 1)
+          if [ "$status_code" != "200" ] && [ "$status_code" != "201" ]; then
+            echo "Failed to create user. Status: $status_code"
+            exit 1
+          fi
+          # Get user ID
+          user_id=$(echo $body | grep -o '"id":[0-9]*' | cut -d':' -f2)
+          echo "Created user_id=$user_id"
+          echo "USER_ID=$user_id" >> $GITHUB_ENV
+      - name: Create test order
+        run: |
+          curl -f -X POST http://localhost:8080/api/orders -H "Content-Type: application/json" -d "{\"user_id\": $USER_ID, \"product\": \"Integration Product\", \"amount\": 19.99}"
+      - name: Teardown
+        run: docker-compose down
